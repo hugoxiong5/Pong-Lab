@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html>
+    <head>
+
+        <!--
+          
+        LAB INSTRUCTIONS:
+        
+        You are to complete the starter code provided to create a working game of pong.  The winner should be the one who scores three points first.
+
+        Where to start:
+
+        Read code and figure out how things are currently working >>> COMPLETE!
+        Get ball to bounce off all four walls (See handleWalls function) >>> COMPLETE!
+        Draw right paddle on screen (See nextFrame function) >>> COMPLETE!
+        Get right paddle to move up/down (see handleKey and nextFrame function) >>> COMPLETE!
+        Keep right paddle on screen (see handleWalls function) >>> COMPLETE!
+        Implement left paddle (drawing, moving, etc) >>> COMPLETE!
+        Get ball to bounce off paddle >>> SORT OF COMPLETE, i think collision detection is kind of janky, probably some edge cases and so on. Couldn't figure out how to fix
+        Switch side wall collision to scoring. >>> COMPLETE!
+        Display winner when one score gets to three. >>> COMPLETE!
+
+        ***also added:***
+        -countdown timer between rounds (fill text on canvas)
+        -added music, sound effects
+        -start screen, end game screen, and button options to restart or end game
+        -ball/paddle velocity increases upon hit
+        -randomly generate pong ball from different corners of the screen at start of each new round
+
+        FUNCTIONALTY COMPLETE!!! (Can continue to add CSS and design)
+
+        bugs: 
+        -no sound effects at game start before keypress >>>> create an alert in HTML, add an "OK" button >>>> COMPLETE
+        -end game after canceling alert (or figure out another way I can end game) >>>> add another statement to get out of recursive loop >>> COMPLETE    
+        -disable player controls when round is loading (3 second timer) >>> create another variable to disable Player controls, put keypress into that conditional >>> COMPLETE
+        -get rid of alerts, add "start new game/end game" button >>> COMPLETE!
+        -"bye" sound won't play >>> COMPLETE!
+        -can't open file in Chrome at start >>> ?????
+
+        -why won't correct score display visually when innerHTML is used??? (like, it won't show up right after innerHTML is used)
+
+        TO DO:
+        -add to Github repo
+        -change button so that it won't call init() if it's a repeat game?
+
+        -->
+
+        <!--  Comment in HTML    -->
+        <meta charset='UTF-8' />
+        <title>Hugo's Pong Game</title>
+        <link rel="shortcut icon" type="image/png" href="https://icon-library.net/images/ping-pong-icon/ping-pong-icon-6.jpg"/>  <!-- adding a favicon-->
+        <style type='text/css'>
+            /* Reset everything to sensible defaults */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+                font-size: 14pt;
+                font-family: "Palantino", sans-serif;
+            }
+
+            body {
+                display: flex;
+                flex-direction: column; /* HUGO: hmm, how many columns? */
+
+                min-height: 100vh; /* "vh" = viewport height, it's relative to 1% of the height of the viewport. So 100vh = 100% height of viewport */
+
+            }
+            div#scoreboard{
+                display: flex;
+                justify-content: space-between; /* items are evenly distributed in the line with equal space around them */
+                border-bottom: 2px solid black;
+                padding: 10px;
+                flex-basis: 10%; /* specifies the initial length of a flexible item */
+            }
+
+            /* ^^Created a scoreboard for the display, flex */
+
+            canvas#ballpen{
+               flex-grow: 1; /* flex-grow property specifies how much the item will grow relative to the rest of the flexible items inside the same container. Now, because there's only ONE item here, it's unclear to me what the purpose of this is*/
+               z-index: -1; /* The z-index property specifies the stack order of an element (which element should be placed in front of, or behind, the others). Negative insures the canvas is ALWAYS behind other elements. This probably wasn't necessary for this program... */
+            }
+
+            /* "Canvas": see info about HTML canvas tag below */
+
+            #startButton {
+              display: none;
+              background-color: lightblue;
+              border: none;
+              color: black;
+              padding: 10px;
+              margin: auto;
+              border-radius: 12px;
+              font-size: 16px;
+              vertical-align: baseline;
+            }
+
+            #endButton {
+              display: none;
+              background-color: lightblue;
+              border: none;
+              color: black;
+              padding: 10px;
+              margin: auto;
+              border-radius: 12px;
+              font-size: 16px;
+              vertical-align: baseline;
+            }
+
+            #startButton:hover {
+              background-color: #FF9800;
+              color: white; 
+            }
+
+            #endButton:hover {
+              background-color: #FF9800;
+              color: white; 
+            }
+
+            #buttonContainer {
+              display: none;
+              margin: auto;
+            }           
+
+        </style>
+    </head>
+    
+    <body>
+
+        <div id='scoreboard'>
+                <div>Score (Top): <span id='topPlayerScore'>0</span></div>
+                <div id='FPS'></div>
+                <div>Score (Bottom): <span id='bottomPlayerScore'>0</span></div>
+        </div>
+        <div id = 'buttonContainer'> 
+                <button id = 'startButton' onclick="init()">Start Game!</button> <!-- adding a button upon load to start the game, which will call init() -->
+                <button id = 'endButton' onclick="endGame()">End Game... forever.</button> <!-- adding a button upon completion of a game to end the game permanently, end program -->
+        </div>
+        <canvas id='ballpen'>
+        </canvas>
+            
+        <!-- 
+        ^^ The <canvas> tag is used to draw graphics, on the fly, via scripting (usually JavaScript). The <canvas> tag is only a container for graphics, you must use a script to actually draw the graphics.
+        
+        HUGO: I think probably this whole <canvas> tag includes the whole rest of the page below the scoreboard, this space is the "ballpen".
+        -->
+
+  
+        <script type='text/javascript'>
+            let oldDrawTime = 0; // HUGO: this variable probably shows the current iteration of the ball (I think). Actually, I dunno
+            
+            // Game Objects
+            let scoreTop = 0; // score of the top player, straightforward
+            let scoreBottom = 0; // bottom player
+
+            // new round variable (used to start countdown timer between rounds, delay next round):
+            let newRound = true; // this is true upon New game start, but it will be turned off after
+
+            // new game variables: user has to press a button to actually start the game, tracking new/repeat games:
+            let newGame = false; 
+            let repeatGame = false; // this is not a repeat game (i.e. it IS the first game played upon program load)
+
+            // player controls (moving paddles) variable:
+            let controls = false;
+
+            // create sound variables, or something like that??? don't really understand to be honest, copied from W3 schools
+            let startSound = new sound("go.wav");
+            let bounceSound = new sound("bounce.wav");
+            let scoreSound = new sound("score.wav");
+            let winSound = new sound("win.wav");
+            let byeSound = new sound("bye.wav");
+            let music = new sound("backgroundmusic.wav");
+            music.sound.setAttribute("loop","true");
+            music.sound.volume = .5;
+
+
+			      // The Ball
+            let ball = {    // this is the ball, it's an object which includes a number of associat. variables
+                x: 0, // current position on X axis on graph. Starts at 0 (top-left of screen)
+                y: 0, // Y axis position. Starts at 0 (top-left of screen)
+                radius: 10, // how big the ball is
+                velX: 5, // the velocity (speed with direction) along X axis
+                velY: 5, // the velocity along Y axis
+                move: function() { // move is a function that is also a property of the object "ball", it's being defined right here
+                    this.x = this.x + this.velX; 
+                    this.y = this.y + this.velY;
+
+                    // ^^ "this" keyword refers to an object--that object which is executing the current bit of javascript code. In other words, every javascript function while executing has a reference to its current execution context, called "this."" Execution context means here is how the function is called.
+                    // HUGO: this is creating a new X and Y coordinate for the ball based on the velocity. The velocity is calcuated by a certain UNIT of space in this coordinate system (it's not really over time). I **think** this unit is pixels, within the HTML canvas. When the move function is executed, the X and Y positions of the ball will change. 
+
+                }
+            };  
+
+            /*
+            Here is how X and Y coordinates are represented in Javascript using the "canvas" function:
+
+            ===============================
+            
+                    1  2  3  4  5  6 7  
+              (0,0) X+
+             1 Y+
+             2                  
+             3                  • (X:5, Y:3)
+             4              
+             5   
+             6       • (X:1, Y:6)
+             7   
+
+
+            ===============================
+          
+            The HTML canvas is a two-dimensional grid.
+
+            The upper-left corner of the canvas has the coordinates (0,0)
+
+            In the previous chapter, you saw this method used: fillRect(0,0,150,75).
+
+            This means: Start at the upper-left corner (0,0) and draw a 150x75 pixels rectangle.
+
+            That is, X and Y coordinates are set as pixels, so X= 200 means X is 200 pixels away from the left edge of the defined space
+
+            Mathematically, a rectangle is uniquely defined with its starting point (x,y) and the direction vector (width,height). As you can see, x/y and width/height fully describe the rectangle. Derived properties can be easily calculated from them:
+
+            left = x
+            top = y
+            right = x + width
+            bottom = y + height
+
+            */
+
+            //Adding a canvas element with width/height in global scope, this allows me to keep paddles on screen in handlekey function itself, should only need to be defined ONCE in whole program:
+            let canvas = document.getElementById('ballpen');
+
+            // Also get buttons, define in global score;
+            let startButton = document.getElementById("startButton");
+
+            // Top Paddle (defines paddle object as a set of xy coordinates and also width and height in pixels)
+            let paddleTop = {
+                x: 0,
+                y: 0,
+                w: 150,
+                h: 30,
+                velX: 50
+            };
+
+            // Bottom Paddle
+            let paddleBot = {
+                x: 0,
+                y: 0,
+                w: 150,
+                h: 30,
+                velX: 50
+            };
+
+            // New Game: press button to actually start the game, either upon first load or after a game is complete:
+            function startGame () {
+
+              music.stop();
+
+              canvas.width = canvas.clientWidth;
+              canvas.height = canvas.clientHeight; 
+
+              let context = canvas.getContext("2d");
+              
+              context.font = "30px Palantino";
+              context.textAlign = "center";
+              context.textBaseline = "middle";
+
+              // positioning the button menu (newGame button and endGame button) via a container
+              buttonContainer.style.display = "block";
+              buttonContainer.style.position = "relative";
+              buttonContainer.style.top = ""+(canvas.height/2+ 50)+"px";
+
+              if (repeatGame == false) {
+                // show start button with no changes to text, set CSS position properties so that it appears in correct place
+                let startButton= document.getElementById("startButton");
+                startButton.style.display = "inline-block";
+                context.strokeText("ARE YOU READY TO PLAY PONG?", canvas.width/2, canvas.height/2 - 30);
+              }
+              
+              else {
+                startButton.innerHTML = "Start New Game!";
+                startButton.style.display = "inline-block";
+                endButton.style.display = "inline-block";
+                startButton.style.marginRight = "10vw";
+                newGame = false;
+
+                if ( scoreTop == 3) {
+                  context.strokeText("TOP PLAYER HAS WON! DO YOU WANT TO PLAY AGAIN?", canvas.width/2, canvas.height/2 - 30);
+                }
+
+                if ( scoreBottom == 3) {
+                  context.strokeText("BOTTOM PLAYER HAS WON! DO YOU WANT TO PLAY AGAIN?", canvas.width/2, canvas.height/2 - 30);
+                }
+
+              }
+            
+            }
+
+            // Creates all the objects and starts the game
+            function init() {
+                
+                startSound.play();
+                music.play();
+
+                //allow player controls (move paddles)
+                controls = true;
+
+                // delete/hide buttons, plus reset scores
+                startButton.style.display = "none";
+                endButton.style.display = "none";
+                scoreTop = 0;
+                scoreBottom = 0;
+                topPlayerScore.innerHTML = scoreTop;
+                bottomPlayerScore.innerHTML = scoreBottom;
+
+                // this is no longer a fresh game, will change options upon game completion
+                repeatGame = true;
+
+                // let canvas = document.getElementById('ballpen'); // this defines a variable, canvas, which is equal to "ballpen" (the HTML <canvas> tag, <canvas> being defined as a container to draw graphics. In our HTML layout, the "ballpen" EXCLUDES the scoreboard, but includes the entire rest of the screen)
+                // ^^ I moved to global scope and commented it out
+                
+                // HUGO: if I also add width and height to nextFrame()... I assume this will make the game window responsive as it continually updates the size of the canvas, like if I want to make it bigger or smaller in real-time. Let's see what hapepns!
+               
+                canvas.width = canvas.clientWidth; // ".width" here sets or returns the width of an element. "clientWidth" is a built-in function: returns the inner width of an element in pixels. It includes padding but excludes borders, margins, and vertical scrollbars (if present).
+
+                canvas.height = canvas.clientHeight; // same as above, but for height
+
+                window.addEventListener('keydown', handleKey ); // "window" is a built-in object, it represents the browser's window. The event listener added here fires when the is triggered by a "keydown", which happens when ANY key is pressed. This will call the "handleKey" function. HUGO: Presumably, pressing keys is important to the Pong game--probably moving the paddles to the left and right, I'm guessing
+
+                // Setup objects here
+
+                //Ball:
+                ball.x = ball.radius; // sets the location of the ball to the radius, which is 10. That is, the location of the ball is initialized at x=10
+                ball.y = ball.radius; // see above. The ball starts off at 10,10 in XY coordinate space
+
+                // ^^ Note: It's actually important that the ball starts off at (10, 10) coordinates, because if it's any less than that, the collision for top and left walls functions in handleWalls() I wrote will not work--because the edges of the ball will be negative, causing both its X and Y directions to reverse back and forth in a loop
+
+                //Paddles: set up correct initial positions
+                paddleTop.x = canvas.width/2 - 75;
+                paddleTop.y = 50;
+
+                paddleBot.x = canvas.width/2 - 75;
+                paddleBot.y = canvas.height - 80;  
+
+                window.requestAnimationFrame(nextFrame); 
+                
+                // ^^ tells the browser that you wish to perform an animation and requests that the browser calls a specified function to update an animation before the next repaint. The method takes a callback as an argument to be invoked before the repaint. You should call this method whenever you're ready to update your animation onscreen.  This will request that your animation function be called before the browser performs the next repaint. The number of callbacks is usually 60 times per second.
+                // HUGO: What's's going on here is that when we want to update the ball animation, the function nextFrame() is called. nextFrame() will somehow change the position of the ball, I guess
+            }
+
+            function handleKey( evt ) {
+                // the key that was most recently down
+                let keyPressed = evt.which; // ".which" returns the Unicode value of the pressed keyboard key
+                
+                // console.log( `Key Pressed: ${evt.key} (${evt.which})` );  >>> commented out, don't need
+
+                // ^^ This logs the key that was pressed. The ${} syntax allows expressions to be embedded in strings. For example, `string text ${expression} string text` Template literals are enclosed by the back-tick (` `)  (grave accent) character instead of double or single quotes. The expressions in the placeholders and the text between the back-ticks (` `) get passed to a function
+                // ".key" returns the name of the keyboard button as a string (not the Unicode value)
+
+                // only move paddles if player controls are enabled
+
+                if (controls == true) {
+                  // change position of paddleTop based on whether arrow keys were pressed (Q key to move left, E key to move right)
+                  if (evt.key == "q") {
+                      paddleTop.x -= paddleTop.velX;
+                  }
+                  if (evt.key == "e") {
+                      paddleTop.x += paddleTop.velX;
+                  }
+
+                  // change position of paddleBot based on whether arrow keys were pressed (arrowLeft to move left, arrowRight to move right)
+                  if (evt.key == "ArrowLeft") {
+                      paddleBot.x -= paddleBot.velX;
+                  }
+                  if (evt.key == "ArrowRight") {
+                      paddleBot.x += paddleBot.velX;
+                  }
+
+                  //adjustment to Paddles if edges of paddles are off-screen:
+                  if (paddleTop.x < 0) {
+                      paddleTop.x = 0;
+                  }
+
+                  if (paddleTop.x + 150 > canvas.width) {
+                      paddleTop.x = canvas.width - 150;
+                  }
+                  
+                  if (paddleBot.x < 0) {
+                    paddleBot.x = 0;
+                  }
+
+                  if (paddleBot.x + 150 > canvas.width) {
+                    paddleBot.x = canvas.width - 150;
+                  }
+              
+                }
+
+            }
+
+            // Plays a 'tick' of the game
+            function playGameTick(){
+                
+                // Move the ball here
+                ball.move(); // this calls the move function property of the ball object (see above). It will move the XY coordinate position of the ball based on the velocity per "tick" (I dunno how fast a "tick" is, 60 fps???. And also, the distance it will move is defined by what? Pixels?)
+
+                handleWalls(); // see function below
+                handlePaddle(); // see function below
+
+                // ^^ a "Game Tick" has three different things that need to be calculated, it seems. First, the ball is moved to a new position. Second, check whether the ball is colliding/overlapping with a wall, and if so, change the direction and velocity. Third, check whether the ball is colliding/overlapping with a paddle, and if so, change direction and velocity.
+            }
+
+            // handles collision with the walls
+            function handleWalls(){
+                // let canvas = document.getElementById('ballpen'); 
+                
+                // HUGO: why is the Cavas defined again--already defined in init()? what is scope of "let"?
+                // OKay, more: Variables declared by let have their scope in the block for which they are defined, as well as in any contained sub-blocks. So canvas needs to be defined twice, because these are seperate functions. HOWEVER--why not define let outside of the function, so that it has a global scope? (So only define it once)
+                // What happens if i delete the above "let" statement? Hmm... (answer: error, canvas is not defined)
+
+                //HUGO: Hmm, the below doesn't do anything, why not? Should be continually responsive to changes in viewport size, why only initially? Actually, it seems width works, but height (bottom edge) doesn't work?
+                // HUGO: What I'm trying to do here is to make it so that the ball still bounces properly when I resize the window, but I failed...
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+
+
+                // Collision with Bottom Edge:
+                if (ball.y + ball.radius > canvas.height) {
+                    scoreTop += 1;
+                    updateScore();
+                }
+
+                // Collision with Top Edge:
+                if (ball.y - ball.radius < 0 ) {
+                  scoreBottom += 1;
+                  updateScore();
+                }
+
+
+                // ^^ Check to see if the edge of the ball (ball Y coordinate + ball radius) crosses than total height of the canvas, aka, the bottom edge of the canvas.
+                // Not sure I fully understand. Canvas.height was set in init()... BUT I think the scope of the canvas variable was restricted to the init() function only. Shouldn't it have to be set again, here?
+                // Maybe ".height" is auto-set, has a default value? But if so, what was the purpose of setting it in init() > Oh, maybe these properties are used in the nextFrame() function
+                // Anyway, if the ball's edge is at a greater Y coordinate than bottom edge of canvas, change the velocity Y of the ball to NEGATIVE. This simply reverses the direction vector: instead of Y increasing, it now decreases. The ball will now move up instead of down, as defined in the "ball" object's "move()" function, where this.y = this.y + this.velY;
+
+                // TO DO: Get ball to bounce off all four walls (See handleWalls function)
+                // this is pretty straightforward, basically add some more if statements for each of the three remaining edges of the canvas, and then reverse either the velX or velY property
+
+                // Collision with Left Edge:
+                if (ball.x - ball.radius < 0 ) {
+                  bounceSound.play();
+                  ball.velX = -ball.velX;
+                  ball.velX += .5;
+                }
+
+                // Collision with Right Edge:
+                if (ball.x + ball.radius > canvas.width) {
+                  bounceSound.play();
+                  ball.velX = -ball.velX;
+                  ball.velX -= .5;
+                }
+            }
+
+            // collisions with paddle
+            function handlePaddle(){
+                
+                // HUGO: okay, so all four walls of the paddles need to interact with the ball, possible for ball to collide and bounce off any of them. 
+                // First, we need the precise coordinates of the paddles -- this is already stored in the "paddleTop" and "paddleBot" objects. The important thing to check are the coordinates of the edges -- for example, left edge (paddleTop.x), top edge (paddleTop.y), bottom edge (paddleTop.y+30), right edge (paddleTop.x+150)
+                // We also need to figure out the edges of the ball. We can do this by creating a rectangular "hitbox" around the ball. The top edge of the ball is ball.y - ball.radius, the right edge of the ball is ball.x + ball.radius, the tp-right edge of the ball in XY coordinates is (ball.y.radius, ball.x+ball.radius), and so on
+                // If these edges overlap, we'll change the direction of the ball
+                // However, its a little more complicated because we still have to calculate the direction the ball SHOULD go--because the ball can bounce different ways depending on where it hits the paddle. See the tutorial resource. Let's game out the scenarios logically:
+
+                // 1: Top edge of ball hits bottom edge of Top Paddle
+
+                // 2: Bottom edge of ball hits top edge of Top Paddle >>> actually, this is impossible given how Pong works, I THINK
+
+                // 3: Right edge of ball hits left edge of Top Paddle
+
+                // 4: Left edge of ball hits right edge of Top Paddle 
+
+                // Some edges are reversed for the Bottom Paddle
+
+                // Edges of Ball:
+                let ballTop = ball.y - ball.radius;
+                let ballBottom = ball.y + ball.radius;
+                let ballLeft = ball.x - ball.radius;
+                let ballRight = ball.x + ball.radius;
+
+                // Edges of Top Paddle:
+                let pT_Top = paddleTop.y;
+                let pT_Bottom = paddleTop.y + 30;
+                let pT_Left = paddleTop.x;
+                let pT_Right = paddleTop.x + 150;
+
+                // Edges of Bottom Paddle:
+                let pB_Top = paddleBot.y;
+                let pB_Bottom = paddleBot.y + 30;
+                let pB_Left = paddleBot.x;
+                let pB_Right = paddleBot.x + 150;
+
+                // Detect if any edges of ball and top paddle overlap:
+                if ( (ballBottom <= pT_Top || ballLeft >= pT_Right || ballTop >= pT_Bottom || ballRight <= pT_Left) == false) {
+                  console.log("ball touches/overlaps top paddle!");
+                  console.log("Math.sign(ball.velX) = " + Math.sign(ball.velX));
+                  console.log("Math.sign(ball.velY) = " + Math.sign(ball.velY));
+                }
+
+                // Detect if any edges of ball and bottom paddle overlap:
+                if ( (ballBottom <= pB_Top || ballLeft >= pB_Right || ballTop >= pB_Bottom || ballRight <= pB_Left) == false) {
+                  console.log("ball touches/overlaps bottom paddle!");
+                  console.log("Math.sign(ball.velX) = " + Math.sign(ball.velX));
+                  console.log("Math.sign(ball.velY) = " + Math.sign(ball.velY));
+                }
+
+                // if I keep moving in my current X direction, will ball collide with the top paddle? HUGO: I still don't fully understand this, copied from the tutorial. Let's see if works even in edge cases... (ask Brian how this works exactly???)
+                if ( ballRight + ball.velX > pT_Left && ballLeft + ball.velX < pT_Right && ballBottom > pT_Top && ballTop < pT_Bottom ) {
+                  console.log("X collide Top Paddle: reverse direction");
+                  bounceSound.play();
+                  ball.velX *= -1;
+                  paddleTop.velX += 10;
+                  if (Math.sign(ball.velX) == 1) {
+                    ball.velX += .5;
+                  } else {
+                    ball.velX -= .5;
+                  }
+                }
+
+                // if I keep moving in my current Y direction, will ball collide with the top paddle?
+                if ( ballRight > pT_Left && ballLeft < pT_Right && ballBottom + ball.velY > pT_Top && ballTop + ball.velY < pT_Bottom ) {
+                  console.log("Y collide Top Paddle: reverse direction"); 
+                  bounceSound.play();
+                  ball.velY *= -1;
+                  paddleTop.velX += 10;
+                  if (Math.sign(ball.velY) == 1) {
+                    ball.velY += .5;
+                  } else {
+                    ball.velY -= .5;
+                  }
+                }
+
+                // if I keep moving in my current X direction, will ball collide with the bottom paddle?
+                if ( ballRight + ball.velX > pB_Left && ballLeft + ball.velX < pB_Right && ballBottom > pB_Top && ballTop < pB_Bottom ) {
+                  console.log("X collide Bottom Paddle: reverse direction");
+                  bounceSound.play();
+                  ball.velX *= -1;
+                  paddleBot.velX += 10;
+                  if (Math.sign(ball.velX) == 1) {
+                    ball.velX += .5;
+                  } else {
+                    ball.velX -= .5;
+                  }
+                }
+
+                // if I keep moving in my current Y direction, will ball collide with the bottom paddle?
+                if ( ballRight > pB_Left && ballLeft < pB_Right && ballBottom + ball.velY > pB_Top && ballTop + ball.velY < pB_Bottom ) {
+                  console.log("Y collide Bottom Paddle: reverse direction"); 
+                  bounceSound.play();
+                  ball.velY *= -1;
+                  paddleBot.velX += 10;
+                  if (Math.sign(ball.velY) == 1) {
+                    ball.velY += .5;
+                  } else {
+                    ball.velY -= .5;
+                  }
+                }
+
+              }
+
+            function updateScore(){
+
+              //update player scoreboard visually: HOWEVER, it seems this won't actually display until the function is over, I dunno why... score displays at 2 even when the actual score stored in data is 3
+              topPlayerScore.innerHTML = scoreTop;
+              bottomPlayerScore.innerHTML = scoreBottom;
+
+              scoreSound.play();
+
+              // Create random starting position for ball in next round (one of the four corners)
+
+              canvas.width = canvas.clientWidth;
+              canvas.height = canvas.clientHeight;
+
+              let corner = Math.floor((Math.random() * 4) + 1); // generates random number between 1 and 4, Math.random generates number between 0 and 1, math.floor rounds to nearest integer. In this case, one of the 4 corners: 1 (top left), 2 (top right), 3 (bottom left), 4 (bottom right)
+
+              if ( corner == 1) {
+                ball.x = ball.radius;
+                ball.y = ball.radius;
+                ball.velX = 5;
+                ball.velY = 5;
+              }
+
+              if ( corner == 2) {
+                ball.x = canvas.width - ball.radius;
+                ball.y = ball.radius;
+                ball.velX = -5;
+                ball.velY = 5;
+              }
+
+              if ( corner == 3) {
+                ball.x = ball.radius;
+                ball.y = canvas.height - ball.radius;
+                ball.velX = 5;
+                ball.velY = -5;
+              }
+
+              if ( corner == 4) {
+                ball.x = canvas.width - ball.radius;
+                ball.y = canvas.height - ball.radius;
+                ball.velX = -5;
+                ball.velY = -5;
+              }
+
+              paddleTop.x = canvas.width/2 - 75;
+              paddleTop.y = 50;
+
+              paddleBot.x = canvas.width/2 - 75;
+              paddleBot.y = canvas.height - 80; 
+
+              newRound = true; // after score is updated, start new Round, delay the start of next round
+
+              // Game Over test -- is anybody's score 3? >>> WHY WON'T THIS UPDATE VISUALLY???
+              if ( scoreTop == 3 || scoreBottom == 3) {
+                  winSound.play();
+                  newGame = true;
+                }
+
+            }
+
+            // constructs the next frame and draws the picture
+            function nextFrame(timestamp) {
+
+                // nextFrame() is called by the window.requestAnimationFrame(nextFrame) in init()
+                // I'm not sure what the "timestamp" parameter is doing here, probably important below 
+                // I *think* that nextFrame will default be called at 60 fps, that is, it's refreshing 60 times a second (this is what requestAnimationFrame does by default)
+
+                playGameTick(); // moves ball then checks for collisions with walls then paddles
+
+                // Grab the canvas and clear it
+                // let canvas = document.getElementById('ballpen'); // HUGO: why clear it? what's the point of that?
+                let context = canvas.getContext('2d'); // getContext() is a built-in object that provides methods and properties for drawing on the canvas. "2d" is a two dimensional object, which the variable "context" points to.  
+                context.clearRect(0,0,canvas.width,canvas.height); // clearRect() clears the specified pixels within a given rectangle. We need to clear the entire canvas, obviously, because we only want one "pong" ball
+            
+                // Draws the TOP Paddle, as a rectangle:
+                context.fillRect(paddleTop.x,paddleTop.y,paddleTop.w,paddleTop.h); // 4 parameters all in pixels, I think: X coordinate, Y coordinate, width, height
+
+                // Draws the BOTTOM Paddle, as a rectangle:
+                context.fillRect(paddleBot.x,paddleBot.y,paddleBot.w,paddleBot.h);
+
+                // Update non-canvas items (score and FPS)
+                updateFPS(timestamp); // call the updateFPS() function with the timestamp parameter--still unknown if this is a built-in calculated number?
+
+                // there is no new game, nobody has scored, proceed as normal
+                if ( newRound == false && newGame == false) {
+                  
+                  //Draws the ball -- it's moved into this if statement to hide the position of the ball during a new round:
+                  context.beginPath()                
+                  context.arc(ball.x,ball.y,ball.radius,0,2*Math.PI);
+                  context.fill()
+                  /// ^^ this all creates a filled circle shape
+                  
+                  window.requestAnimationFrame(nextFrame); 
+                }
+
+                // start new Game -- go to reset screen if score is 3 for either player
+                else if ( newGame == true) {
+                  startGame();
+                }
+
+                // not a new Game, but somebody scored -- start a timer between next rounds                
+                else {
+                  setTimeout(nextRound,3000); // HUGO: why doesn't window.requestAnimationFrame(nextFrame) work directly with setTimeout function????
+
+                  // create countdown timer counting down from 3 seconds in center of canvas using "fill text" canvas function
+                  let timer = 3;
+                  newRound = false;
+                  controls = false;
+                  context.font = "30px Palantino";
+                  context.textAlign = "center";
+                  context.textBaseline = "middle";
+                  context.strokeText("NEXT ROUND IN: " + timer + " SECONDS!", canvas.width/2, canvas.height/2);
+                  let timerBox = context.measureText("NEXT ROUND IN: 3 SECONDS!");
+                  let countdown = setInterval(function() {
+                    timer -= 1;
+                    context.clearRect(canvas.width/2 - timerBox.width/2, canvas.height/2 - 15, timerBox.width, 30);
+                    context.strokeText("NEXT ROUND IN: " + timer + " SECONDS!", canvas.width/2, canvas.height/2);
+                    if (timer <= 0) {
+                      clearInterval(countdown);
+                    }
+                  }, 1000);
+                }
+  
+            }
+
+            //starts the next Round after someone scored:
+            function nextRound() {
+                paddleTop.velX = 50;
+                paddleBot.velX = 50;
+                controls = true;
+                
+                //Drawing the ball
+                let context = canvas.getContext('2d');
+                context.beginPath()                
+                context.arc(ball.x,ball.y,ball.radius,0,2*Math.PI);
+                context.fill()
+                window.requestAnimationFrame(nextFrame);
+                
+              // ^^ Fascinating, the requestAnimationFrame(nextFrame) literally calls itself at the end of its own function. nextFrame() calls nextFrame(), and so on. So, it's infinitely recursive. This makes sense because the program has to CONSTANTLY redraw the ball, at 60 new frames per second.
+
+            }
+
+            // Show the FPS currently
+            function updateFPS(timestamp){
+                let fpsDiv = document.getElementById('FPS'); // gets the element with ID 'FPS' in the HTML document, which is in the scoreboard div
+                let calcFPS = 1000/(timestamp - oldDrawTime) // oldDrawtime = 0 as defined in init(), but again, where is the "timestamp" number coming from?
+                 calcFPS = Math.round(calcFPS); // I *think* this rounds the calcFPS to nearest round number
+                fpsDiv.innerHTML = calcFPS + ' fps'; // "innerHTML writes in text in an HTML doc, so will write the current FPS calculated as a integer number into the scoreboard"
+
+                oldDrawTime = timestamp;
+
+                // HUGO: I'm having trouble understanding this. If the FPS is, say, 60 frames per second, then calcFPS = 60 =  1000/16.6666~. So "timestamp - oldDrawTime" should equal 16.6666~, but how? This all depends on understanding how timestamp works. The oldDrawTime is always equalized to the timestamp at the end of EACH frame, so the timestamp must consstantly be increasing as well. 
+            }
+
+
+            //Add some sound effects via objects (?????) - I don't have a very good idea how this works, whatever. Copied from W3 schools: "In our examples, we create a new object constructor to handle sound objects:"
+
+            function sound(src) {
+              this.sound = document.createElement("audio");
+              this.sound.src = src;
+              this.sound.setAttribute("preload", "auto");
+              this.sound.setAttribute("controls", "none");
+              this.sound.style.display = "none";
+              document.body.appendChild(this.sound);
+              this.play = function(){
+                this.sound.play();
+              }
+              this.stop = function(){
+                this.sound.pause();
+              }
+            }
+
+            // totally end the game, clear screen and all objects, etc.
+            function endGame() {
+              byeSound.play();
+              buttonContainer.style.display = "none";
+              let context = canvas.getContext("2d");
+              context.clearRect(0,0,canvas.width,canvas.height);
+            }
+
+            window.addEventListener('load', startGame); // adds an event listiner trigger so that when the window is finished loaded, the init() function is called, starting the game;
+        </script>
+    </body>
+</html>
+
+<!-- 
+
+/*
+
+// Collision: Right edge of ball hits left edge of Top Paddle
+if (  &&  &&  && ) { 
+  console.log("ball hits left edge of Top Paddle");
+  ball.velX = -ball.velX;
+  ball.velY += .5;
+  ball.velX += .5;
+  paddleTop.velX += 10;
+
+
+                  //  
+  if (bouncingRectX [25] + bouncingRectWidth [100] (RIGHT EDGE) + bouncingRectSpeedX [1] > centerRectX [125] (LEFT EDGE) YES &&                  
+      bouncingRectX [25] (LEFT EDGE) + bouncingRectSpeedX [1] < centerRectX [125] + centerRectWidth (RIGHT EDGE) [50] YES && 
+      bouncingRectY [50] + bouncingRectHeight [50] (BOTTOM EDGE) > centerRectY (TOP EDGE) [100] NO && 
+      bouncingRectY [50] (TOP EDGE) < centerRectY [100] + centerRectHeight (BOTTOM EDGE) [100] YES) >>> NO, whole thing is NO {
+    bouncingRectSpeedX *= -1;
+  }
+  //bounce off left and right edges of screen
+  else if(bouncingRectX < 0 || bouncingRectX + bouncingRectWidth > width){
+    bouncingRectSpeedX *= -1; NO
+  }
+
+
+  //if I keep moving in my current Y direction, will I collide with the center rectangle?
+  if (bouncingRectX [25] + bouncingRectWidth [100] (RIGHT EDGE) > centerRectX [125] (LEFT EDGE) NO && 
+      bouncingRectX [25] (LEFT EDGE) < centerRectX [125] + centerRectWidth [50] (RIGHT EDGE) YES && 
+      bouncingRectY [50] + bouncingRectHeight [50] (BOTTOM EDGE) + bouncingRectSpeedY [1] > centerRectY (TOP EDGE) [100] YES && 
+      bouncingRectY [50] (TOP EDGE) + bouncingRectSpeedY [2] < centerRectY [100] + centerRectHeight [100] (BOTTOM EDGE) YES ) >>>> WHOLE THING IS YES {
+    bouncingRectSpeedY *= -1; YES
+  }
+
+
+            }       
+
+/*
+                //HUGO: The version of collision detection I tried in the old version is bad, so let's do it over. There is a two step process, just like in the tutorial. First, detect the LACK of ANY collision--that is, the ball and the paddles are NOT overlapping. Then, if this is false (they are overlapping), figure out the current direction of the ball and location, and then change it correctly.
+
+                // Detect if any edges of ball or top paddle overlap:
+                if ( (ballBottom < pT_Top || ballLeft > pT_Right || ballTop > pT_Bottom || ballRight < pT_Left) == false) {
+                  console.log("ball touches/overlaps top paddle!");
+
+                  // We know that ball has hit the Top Bottle. now figure out direction of ball, both x and y, so that the x and y directions can now changed.
+                  // velX and velY will change based on WHERE it hits the paddle (each of the four sides). On paddle's left, ball will reverse a positive x direction to become negative. On paddle's top, ball will reverse a positive y direction to become negative (but this scenario is impossible within paramters of game). One paddle's bottom, ball will reverse a negative y direction to become positive. On paddle's right, ball will reverse a negative x direction to become positive.
+                  // The edge of the ball matters greatly here. For example, to hit the paddle's left edge, it's ONLY possible for the ball's right edge to hit first (not top, bottom, or left. Remember the ball has a rectangular "hitbox" around it).
+
+                  if (ballBottom + ball.velY < pT_Bottom) {
+                    ball.velY = -ball.velY;
+                  }
+
+                  if (ballLeft + ball.velX > pT_Right) {
+                      ball.velX = -ball.velX;
+                  }
+
+
+
+                }
+
+/*
+float centerRectX = 125;
+float centerRectY = 100;
+float centerRectWidth = 50;
+float centerRectHeight = 100;
+
+float bouncingRectX = 10; >>>>>> 25
+float bouncingRectY = 10; >>>>>> 50
+float bouncingRectWidth = 100;
+float bouncingRectHeight = 50;
+float bouncingRectSpeedX = 1;
+float bouncingRectSpeedY = 2;
+
+void setup() {
+  size(300, 300);
+  noFill();
+}
+
+void draw() {
+  background(64);
+
+  //draw the center rectangle
+  stroke(255);
+  rect(centerRectX, centerRectY, centerRectWidth, centerRectHeight);                            // let's say bouncing rectangle is now colliding with center rectangle, so X location of bouncing rectangle (bouncingRectX + bouncingRectWidth) is overlapping the center rectangle, AND Y location (bouncingRectY + bouncingRectHeight) is overlapping. Let's say for the first collision, the X location is 125, and the Y location is 100. (Exactly overlapping with center rectangle). X speed is 1, Y speed is 2 
+
+  //if I keep moving in my current X direction, will I collide with the center rectangle?       
+  if (bouncingRectX [25] + bouncingRectWidth [100] (RIGHT EDGE) + bouncingRectSpeedX [1] > centerRectX [125] (LEFT EDGE) YES &&                  
+      bouncingRectX [25] (LEFT EDGE) + bouncingRectSpeedX [1] < centerRectX [125] + centerRectWidth (RIGHT EDGE) [50] YES && 
+      bouncingRectY [50] + bouncingRectHeight [50] (BOTTOM EDGE) > centerRectY (TOP EDGE) [100] NO && 
+      bouncingRectY [50] (TOP EDGE) < centerRectY [100] + centerRectHeight (BOTTOM EDGE) [100] YES) >>> NO, whole thing is NO {
+    bouncingRectSpeedX *= -1;
+  }
+  //bounce off left and right edges of screen
+  else if(bouncingRectX < 0 || bouncingRectX + bouncingRectWidth > width){
+    bouncingRectSpeedX *= -1; NO
+  }
+
+
+  //if I keep moving in my current Y direction, will I collide with the center rectangle?
+  if (bouncingRectX [25] + bouncingRectWidth [100] (RIGHT EDGE) > centerRectX [125] (LEFT EDGE) NO && 
+      bouncingRectX [25] < centerRectX [125] + centerRectWidth [50] YES && 
+      bouncingRectY [50] + bouncingRectHeight [50] + bouncingRectSpeedY [1] > centerRectY [100] YES && 
+      bouncingRectY [50] + bouncingRectSpeedY [2] < centerRectY [100] + centerRectHeight [100] YES) >>>> WHOLE THING IS YES {
+    bouncingRectSpeedY *= -1; YES
+  }
+  //bounce off top and bottom edges of screen
+  else if(bouncingRectY < 0 || bouncingRectY + bouncingRectHeight > height){
+    bouncingRectSpeedY *= -1;
+  }
+
+
+                // Collision: Top edge of ball hits bottom edge of Top Paddle
+                if ( ballTop <= pT_Bottom && ballBottom >= pT_Top && ballLeft <= pT_Right && ballRight >= pT_Left) {
+                  console.log("ball hits bottom edge of Top Paddle");
+                  bounceSound.play();
+                  ball.velY = -ball.velY;
+                  ball.velY += .5; // there's no velX increase (right now) because , I'll fix this later
+                  paddleTop.velX += 10;
+                }
+
+                // Collision: Right edge of ball hits left edge of Top Paddle
+                if ( ballTop <= pT_Bottom && ballBottom >= pT_Top && ballLeft < pT_Left && ballRight >= pT_Left) { 
+                  console.log("ball hits left edge of Top Paddle");
+                  ball.velX = -ball.velX;
+                  ball.velY += .5;
+                  ball.velX += .5;
+                  paddleTop.velX += 10;
+                }
+
+                // Collision: Left edge of ball hits right edge of Top Paddle
+                if ( ballTop <= pT_Bottom && ballBottom > pT_Top && ballLeft <= pT_Right && ballRight > pT_Right ) {
+                  console.log("ball hits right edge of Top Paddle");
+                  ball.velX = -ball.velX;
+                  ball.velY += .5;
+                  ball.velX += .5;
+                  paddleTop.velX += 10;
+                } 
+
+                
+
+
+                
+                
+
+                // Collision: Right edge of ball hits left edge of Bottom Paddle
+                if (ballTop <= pB_Bottom && ballBottom >= pB_Top && ballRight >= pB_Left && ballLeft <= pB_Left ) {
+                  console.log("ball hits left edge of Top Paddle");
+                  ball.velX = -ball.velX;
+                  ball.velY -= .5;
+                  ball.velX += .5;
+                  paddleBot.velX += 5;
+                }
+
+                // Collision: Left edge of ball hits right edge of Bottom Paddle
+                if ( ballTop <= pB_Bottom && ballBottom >= pB_Top && ballLeft <= pB_Right && ballRight >= pB_Right ) {
+                  console.log("ball hits right edge of Top Paddle");
+                  ball.velX = -ball.velX;
+                  ball.velY -= .5;
+                  ball.velX += .5;
+                  paddleBot.velX += 5;
+                } 
+              }
+           
+
+
+  */
+
+-->
+
+
+
+
+
+
+
+
+
+
+
